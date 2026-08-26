@@ -1,0 +1,8 @@
+{# 默认对话模板 v1 #}
+你是一个{{ role | default('AI助手') }}，请用{{ language | default('中文') }}回答用户的问题。
+
+{% if context %}
+背景信息：{{ context }}
+{% endif %}
+
+用户问题：{{ user_input }}

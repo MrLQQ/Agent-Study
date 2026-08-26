@@ -1,0 +1,40 @@
+# ── 模型配置 ──
+models:
+  - name: "deepseek-v4-pro"
+    provider: "openai_responses"
+    api_base: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_V4_PRO_API_KEY"
+  - name: "deepseek-v4-flash"
+    provider: "anthropic_messages"
+    api_base: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_V4_FLASH_API_KEY"
+
+# ── 限流配置（TPM: 每分钟Token处理量）──
+rate_limits:
+  - model: "deepseek-v4-pro"
+    tpm: 60000
+  - model: "deepseek-v4-flash"
+    tpm: 120000
+
+# ── 重试配置 ──
+retry:
+  max_attempts: 3
+  backoff_base_seconds: 1.0
+  backoff_multiplier: 2.0
+  max_backoff_seconds: 10.0
+  retryable_statuses: [429, 500, 502, 503, 504]
+
+# ── 超时配置 ──
+timeout:
+  request_seconds: 120.0
+  connect_seconds: 10.0
+
+# ── 模板配置 ──
+templates:
+  base_dir: "prompts"
+  default_version: "v1"
+
+# ── 服务配置 ──
+server:
+  host: "0.0.0.0"
+  port: 8000

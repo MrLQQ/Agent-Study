@@ -1,0 +1,28 @@
+[project]
+name = "llm-gateway"
+version = "0.1.0"
+description = "统一LLM Gateway服务，支持多模型适配、流式/非流式响应、模板管理、可观测性与限流"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    "httpx>=0.27.0",
+    "jinja2>=3.1.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "sse-starlette>=2.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-httpx>=0.30.0",
+    "httpx>=0.27.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
