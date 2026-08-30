@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # 环境变量（从 .env 读取）
     log_level: str = "INFO"
 
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 def _load_yaml_config() -> Dict[str, Any]:

@@ -3,10 +3,10 @@
 适用模型: deepseek-v4-pro
 协议端点: POST /v1/responses
 
-请求体差异（与 Anthropic 对比）：
-- 用户输入: "input" 字段（字符串或数组），而非 "messages"
-- 系统提示词: "instructions" 字段，而非顶层 "system" 字段
-- 流式事件: response.output_text.delta
+请求体格式（Responses API）：
+- input: 用户输入（字符串或 item 列表）
+- instructions: 系统提示词
+- 流式事件: response.output_text.delta / response.completed
 """
 
 import json
@@ -26,28 +26,20 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIResponsesAdapter(BaseAdapter):
-    """OpenAI Responses API 适配器"""
+    """OpenAI Responses API 适配器（DeepSeek 兼容）"""
 
     # ── 请求构建 ──
 
     def build_request_payload(self, request: UnifiedRequest) -> dict:
-        """构建 OpenAI Responses API 请求体
+        """构建 Responses API 请求体
 
-        格式转换:
-        UnifiedRequest → OpenAI Responses API 格式
+        格式转换: UnifiedRequest → Responses API 格式
+        - input: 用户消息文本（最后一条 user 消息）
+        - instructions: 系统提示词
         """
         # 提取用户消息（最后一条 user 消息作为 input）
         user_messages = [
-            m.content
-            for m in request.messages
-            if m.role == "user"
-        ]
-        # 历史消息（不含最后一条 user 消息）
-        previous_messages = [
-            {"role": m.role.value, "content": m.content}
-            for m in request.messages
-            if m.role != "user"
-            or m.content != (user_messages[-1] if user_messages else "")
+            m.content for m in request.messages if m.role == "user"
         ]
 
         payload: dict = {
@@ -60,18 +52,6 @@ class OpenAIResponsesAdapter(BaseAdapter):
         if request.system_prompt:
             payload["instructions"] = request.system_prompt
 
-        # 历史消息通过 previous_response_id 或直接拼接
-        if previous_messages:
-            # 将历史消息拼接到 input 中以保持上下文
-            history_text = "\n".join(
-                f"{m['role']}: {m['content']}" for m in previous_messages
-            )
-            if history_text:
-                payload["input"] = (
-                    f"[历史对话]\n{history_text}\n\n[当前问题]\n"
-                    f"{payload['input']}"
-                )
-
         # 模型参数
         if request.parameters:
             for key in ("temperature", "top_p", "max_output_tokens"):
@@ -83,12 +63,9 @@ class OpenAIResponsesAdapter(BaseAdapter):
     # ── 用量提取 ──
 
     def extract_usage(self, raw_response: dict) -> Usage:
-        """从 OpenAI Responses API 响应中提取 Token 用量
+        """从 Responses API 响应中提取 Token 用量
 
-        OpenAI Responses API 用量字段:
-        - usage.input_tokens
-        - usage.output_tokens
-        - usage.total_tokens
+        DeepSeek 用量字段: input_tokens / output_tokens
         """
         usage_data = raw_response.get("usage", {})
         return Usage(
@@ -107,7 +84,7 @@ class OpenAIResponsesAdapter(BaseAdapter):
         payload["stream"] = False
 
         logger.info(
-            "OpenAI Responses API 调用: model=%s, stream=False",
+            "Responses API 调用: model=%s, stream=False",
             request.model,
         )
 
@@ -119,14 +96,14 @@ class OpenAIResponsesAdapter(BaseAdapter):
 
         if response.status_code != 200:
             raise ProviderException(
-                f"OpenAI Responses API 返回错误: status={response.status_code}, "
+                f"Responses API 返回错误: status={response.status_code}, "
                 f"body={response.text[:500]}"
             )
 
         data = response.json()
         clock.stop()
 
-        # 提取输出文本
+        # 提取输出文本：output 数组中 message 类型的 output_text 内容
         output_text = ""
         for item in data.get("output", []):
             if item.get("type") == "message":
@@ -153,7 +130,7 @@ class OpenAIResponsesAdapter(BaseAdapter):
         payload["stream"] = True
 
         logger.info(
-            "OpenAI Responses API 流式调用: model=%s",
+            "Responses API 流式调用: model=%s",
             request.model,
         )
 
@@ -171,11 +148,12 @@ class OpenAIResponsesAdapter(BaseAdapter):
                         f"body={body[:500]}"
                     )
 
-                buffer = ""
                 async for line in response.aiter_lines():
                     if not line or not line.startswith("data: "):
                         continue
                     data_str = line[6:]  # 去掉 "data: " 前缀
+
+                    # DeepSeek Responses API 流以 response.completed 结束，无 [DONE]
                     if data_str.strip() == "[DONE]":
                         break
 
@@ -184,6 +162,7 @@ class OpenAIResponsesAdapter(BaseAdapter):
                     except json.JSONDecodeError:
                         continue
 
+                    # DeepSeek 使用 type 字段（兼容 OpenAI 格式）
                     event_type = event.get("type", "")
 
                     # 处理文本增量事件
@@ -196,11 +175,9 @@ class OpenAIResponsesAdapter(BaseAdapter):
                                 content=text,
                             )
 
-                    # 处理响应完成事件
-                    elif event_type in (
-                        "response.completed",
-                        "response.output_text.done",
-                    ):
+                    # response.output_text.done 不含 usage，忽略
+                    # 等待 response.completed（含完整 response + usage）
+                    elif event_type == "response.completed":
                         clock.stop()
                         usage = self.extract_usage(
                             event.get("response", {})

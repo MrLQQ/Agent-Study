@@ -30,6 +30,10 @@ async def chat(
     """
     request_id = getattr(request.state, "request_id", None)
 
+    # 将 request_id 注入到 context，供服务层可观测性记录使用
+    if request_id:
+        req.context["trace_id"] = request_id
+
     if req.stream:
         # ── 流式响应 ──
         async def event_generator():

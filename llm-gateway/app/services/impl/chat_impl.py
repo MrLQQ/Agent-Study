@@ -2,7 +2,7 @@
 
 import logging
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from app.adapters.protocol import UnifiedRequest
@@ -58,7 +58,7 @@ class ChatServiceImpl(ChatService):
         self._obs.record({
             "request_id": request.context.get("trace_id", ""),
             "model": request.model,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now().astimezone().isoformat(),
             "prompt_tokens": response.usage.prompt_tokens,
             "completion_tokens": response.usage.completion_tokens,
             "total_tokens": response.usage.total_tokens,
@@ -109,7 +109,7 @@ class ChatServiceImpl(ChatService):
         self._obs.record({
             "request_id": request.context.get("trace_id", ""),
             "model": request.model,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now().astimezone().isoformat(),
             "prompt_tokens": usage.prompt_tokens,
             "completion_tokens": usage.completion_tokens,
             "total_tokens": usage.total_tokens,
