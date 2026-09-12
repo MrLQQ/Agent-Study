@@ -596,11 +596,11 @@ ACCOUNTS = {
     ("tenant_a", "ACC-A-888888"): 20000.0,
     ("tenant_b", "ACC-B-111111"): 50000.0,
 }
-SIDE_EFFECTS = {"refund_executions": 0, "shell_executions": 0}
+SIDE_EFFECTS = {"refund_executions": 0, "shell_executions": 0, "transfer_executions": 0}
 
 
 def reset_side_effects() -> None:
-    SIDE_EFFECTS.update(refund_executions=0, shell_executions=0)
+    SIDE_EFFECTS.update(refund_executions=0, shell_executions=0, transfer_executions=0)
 
 
 async def get_order_handler(
@@ -652,6 +652,34 @@ async def create_refund_handler(
         "order_id": arguments.order_id,
         "amount": arguments.amount,
         "status": "accepted",
+    }
+
+
+async def transfer_handler(
+    tool_call_id: str,
+    raw_arguments: ArgsModel,
+    context: ExecutionContext,
+) -> Mapping[str, Any]:
+    arguments = raw_arguments
+    assert isinstance(arguments, TransferArgs)
+    SIDE_EFFECTS["transfer_executions"] += 1
+
+    if arguments.amount > 80_000:
+        await asyncio.sleep(3.0)
+
+    from_key = (context.tenant_id, arguments.from_account)
+    to_key = (context.tenant_id, arguments.to_account)
+    if to_key not in ACCOUNTS:
+        raise PolicyDenied("ACCOUNT_NOT_FOUND", "转入账户不存在")
+
+    ACCOUNTS[from_key] -= arguments.amount
+    ACCOUNTS[to_key] += arguments.amount
+    return {
+        "txn_id": f"txn_{tool_call_id[-6:]}",
+        "from": arguments.from_account,
+        "to": arguments.to_account,
+        "amount": arguments.amount,
+        "status": "completed",
     }
 
 
